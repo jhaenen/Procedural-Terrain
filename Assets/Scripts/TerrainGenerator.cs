@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEditor;
+using System;
 
 public class TerrainGenerator : MonoBehaviour {
     Mesh mesh;
@@ -8,44 +10,62 @@ public class TerrainGenerator : MonoBehaviour {
     Vector3[] vertices;
     int[] triangles;
 
-    public int xSize = 20;
-    public int zSize = 20;
+    public int terrainWidth = 20; //x
+    public int terrainHeight = 20; //z
+    public float noiseScale = 3;
 
     void Start() {
-        mesh = new Mesh();
-        GetComponent<MeshFilter>().mesh = mesh;
-
-        CreateShape();
+        CreateMesh();
+        AttachMesh();
         UpdateMesh();
     }
 
-    void CreateShape() { 
-        vertices = new Vector3[(xSize + 1) * (zSize + 1)];
-    	triangles = new int[xSize * zSize * 2 * 3];
+    float[,] GenerateNoiseMap() {
+        float [,] noiseMap = new float[terrainWidth + 1, terrainHeight + 1];
 
-        for(int x = 0; x <= xSize; x++) {
-            for(int z = 0; z <= zSize; z++) {
-                vertices[x * (zSize + 1) + z] = new Vector3(x, 0, z);
-                if(z != zSize && x != xSize) {
-                    triangles[(x * zSize + z) * 6] = x * (zSize + 1) + z;
-                    triangles[(x * zSize + z) * 6 + 1] = x * (zSize + 1) + z + 1;
-                    triangles[(x * zSize + z) * 6 + 2]  = (x + 1) * (zSize + 1) + z + 1;
+        float tmpScale = noiseScale;
+        if(tmpScale <= 0) tmpScale = 0.001f;
 
-                    triangles[(x * zSize + z) * 6 + 3] = x * (zSize + 1) + z;
-                    triangles[(x * zSize + z) * 6 + 4] = (x + 1) * (zSize + 1) + z + 1;
-                    triangles[(x * zSize + z) * 6 + 5] = (x + 1) * (zSize + 1) + z;
+        for(int x = 0; x <= terrainWidth; x++) {
+            for(int z = 0; z <= terrainHeight; z++) {
+                noiseMap[x,z] = Mathf.PerlinNoise(x / tmpScale, z / tmpScale);
+            }
+        }
+
+        return noiseMap;
+    }
+
+    public void CreateMesh() { 
+        vertices = new Vector3[(terrainWidth + 1) * (terrainHeight + 1)];
+    	triangles = new int[terrainWidth * terrainHeight * 2 * 3];
+
+        float[,] noiseMap = GenerateNoiseMap();
+
+        for(int x = 0; x <= terrainWidth; x++) {
+            for(int z = 0; z <= terrainHeight; z++) {
+                vertices[x * (terrainHeight + 1) + z] = new Vector3(x, noiseMap[x, z], z);
+                if(z != terrainHeight && x != terrainWidth) {
+                    triangles[(x * terrainHeight + z) * 6] = x * (terrainHeight + 1) + z;
+                    triangles[(x * terrainHeight + z) * 6 + 1] = x * (terrainHeight + 1) + z + 1;
+                    triangles[(x * terrainHeight + z) * 6 + 2]  = (x + 1) * (terrainHeight + 1) + z + 1;
+
+                    triangles[(x * terrainHeight + z) * 6 + 3] = x * (terrainHeight + 1) + z;
+                    triangles[(x * terrainHeight + z) * 6 + 4] = (x + 1) * (terrainHeight + 1) + z + 1;
+                    triangles[(x * terrainHeight + z) * 6 + 5] = (x + 1) * (terrainHeight + 1) + z;
                 }
             }
         }
     }
 
-    void UpdateMesh() {
+    public void UpdateMesh() {
         mesh.Clear();
 
         mesh.vertices = vertices;
         mesh.triangles = triangles;
 
         mesh.RecalculateNormals();
+        MeshCollider meshCollider = gameObject.GetComponent<MeshCollider>();
+        meshCollider.sharedMesh = mesh;
     }
 
     private void OnDrawGizmos() {
@@ -54,5 +74,10 @@ public class TerrainGenerator : MonoBehaviour {
         for(int i = 0; i < vertices.Length; i++) {
             Gizmos.DrawSphere(vertices[i], .1f);
         } 
+    }
+
+    public void AttachMesh() {
+        mesh = new Mesh();
+        GetComponent<MeshFilter>().mesh = mesh;
     }
 }
