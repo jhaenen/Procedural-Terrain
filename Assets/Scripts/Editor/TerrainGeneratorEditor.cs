@@ -7,12 +7,16 @@ using UnityEditor;
 public class TerrainGeneratorEditor : Editor {
     public override void OnInspectorGUI() {
         TerrainGenerator terGen = (TerrainGenerator)target;
-
-        DrawDefaultInspector(); 
+        
+        if(DrawDefaultInspector()) {
+            if(terGen.autoUpdate) {
+                terGen.CreateMesh();
+                terGen.UpdateMesh();
+            }
+        } 
 
         if(GUILayout.Button("Generate Terrain")) {
             terGen.CreateMesh();
-            terGen.AttachMesh();
             terGen.UpdateMesh();
         }
     }
