@@ -7,7 +7,7 @@ using System;
 public class TerrainGenerator : MonoBehaviour {
     Mesh mesh;
     Renderer textureRenderer;
-    public Texture2D curText;
+    float[,] noiseMap;
     public enum DrawMode { textureMode, colorMode, meshMode };
 
     Vector3[] vertices;
@@ -17,6 +17,9 @@ public class TerrainGenerator : MonoBehaviour {
     [Header("Terrain Dimensions")]
     public int terrainWidth = 20; //x
     public int terrainHeight = 20; //z
+    public bool useChunks = false;
+    [Range(0, 6)]
+    public int levelOfDetail = 0;
 
     [Header("Terrain Control")]
     public float noiseScale = 3;
@@ -31,7 +34,7 @@ public class TerrainGenerator : MonoBehaviour {
 
     [Header("Color Settings")]
     public Gradient colorGradient;
-    public bool colorMesh = true;
+    public bool coloredMesh = true;
 
     [Header("Other Settings")]
     public DrawMode drawMode;
@@ -94,32 +97,39 @@ public class TerrainGenerator : MonoBehaviour {
         GetComponent<MeshFilter>().mesh = mesh;
         textureRenderer = GetComponent<MeshRenderer>();
 
-        vertices = new Vector3[terrainWidth * terrainHeight];
-    	triangles = new int[(terrainWidth - 1) * (terrainHeight -1) * 6];
-        uvs = new Vector2[terrainWidth * terrainHeight];
+        int inc = (useChunks && levelOfDetail != 0) ? levelOfDetail * 2 : 1;
+        int xVerts = (terrainWidth - 1) / inc + 1;
+        int zVerts = (terrainHeight - 1) / inc + 1;
 
-        float[,] noiseMap = GenerateNoiseMap();
+        vertices = new Vector3[xVerts * zVerts];
+    	triangles = new int[(xVerts - 1) * (zVerts - 1) * 6];
+        uvs = new Vector2[xVerts * zVerts];
 
-        for(int x = 0; x < terrainWidth; x++) {
-            for(int z = 0; z < terrainHeight; z++) {
-                vertices[x * terrainHeight + z] = new Vector3(x, (drawMode == DrawMode.meshMode) ? elevationCurve.Evaluate(noiseMap[x, z]) * elevation : 0, z);
-                uvs[x * terrainHeight + z] = new Vector2(x/(float)terrainWidth, z/(float)terrainHeight);
+        noiseMap = GenerateNoiseMap();
+
+        for(int x = 0; x < terrainWidth; x += inc) {
+            for(int z = 0; z < terrainHeight; z += inc) {
+                int xNorm = x / inc;
+                int zNorm = z / inc;
+                
+                vertices[xNorm * zVerts + zNorm] = new Vector3(x, (drawMode == DrawMode.meshMode) ? elevationCurve.Evaluate(noiseMap[x, z]) * elevation : 0, z);
+                uvs[xNorm * zVerts + zNorm] = new Vector2(x/(float)terrainWidth, z/(float)terrainHeight);
 
                 if(z != (terrainHeight - 1) && x != terrainWidth - 1) {
-                    triangles[(x * (terrainHeight - 1) + z) * 6] = x * terrainHeight + z;
-                    triangles[(x * (terrainHeight - 1) + z) * 6 + 1] = x * terrainHeight + z + 1;
-                    triangles[(x * (terrainHeight - 1) + z) * 6 + 2]  = (x + 1) * terrainHeight + z + 1;
+                    triangles[(xNorm * (zVerts - 1) + zNorm) * 6] = xNorm * zVerts + zNorm;
+                    triangles[(xNorm * (zVerts - 1) + zNorm) * 6 + 1] = xNorm * zVerts + zNorm + 1;
+                    triangles[(xNorm * (zVerts - 1) + zNorm) * 6 + 2]  = (xNorm + 1) * zVerts + zNorm + 1;
 
-                    triangles[(x * (terrainHeight - 1) + z) * 6 + 3] = x * terrainHeight + z;
-                    triangles[(x * (terrainHeight - 1) + z) * 6 + 4] = (x + 1) * terrainHeight + z + 1;
-                    triangles[(x * (terrainHeight - 1) + z) * 6 + 5] = (x + 1) * terrainHeight + z;
+                    triangles[(xNorm * (zVerts - 1) + zNorm) * 6 + 3] = xNorm * zVerts + zNorm;
+                    triangles[(xNorm * (zVerts - 1) + zNorm) * 6 + 4] = (xNorm + 1) * zVerts + zNorm + 1;
+                    triangles[(xNorm * (zVerts - 1) + zNorm) * 6 + 5] = (xNorm + 1) * zVerts + zNorm;
                 }
             }
         }
 
         if(drawMode == DrawMode.textureMode) drawNoiseMap(noiseMap);
-        else if(drawMode == DrawMode.colorMode || (drawMode == DrawMode.meshMode && colorMesh)) drawColorMap(noiseMap);
-        //else textureRenderer.sharedMaterial.mainTexture = null;
+        else if(drawMode == DrawMode.colorMode || (drawMode == DrawMode.meshMode && coloredMesh)) drawColorMap(noiseMap);
+        else textureRenderer.sharedMaterial.mainTexture = null;
     }
 
     public void UpdateMesh() {
@@ -135,7 +145,7 @@ public class TerrainGenerator : MonoBehaviour {
     }
 
     public void drawNoiseMap(float[,] noiseMap) {
-        curText = new Texture2D(terrainWidth, terrainHeight);
+        Texture2D texture = new Texture2D(terrainWidth, terrainHeight);
         Color[] colorMap = new Color[terrainWidth * terrainHeight];
 
         for(int x = 0; x < terrainWidth; x++) {
@@ -144,14 +154,14 @@ public class TerrainGenerator : MonoBehaviour {
             }
         }
 
-        curText.SetPixels(colorMap);
-        curText.Apply();
+        texture.SetPixels(colorMap);
+        texture.Apply();
 
-        textureRenderer.sharedMaterial.mainTexture = curText;
+        textureRenderer.sharedMaterial.mainTexture = texture;
     }
 
     public void drawColorMap(float[,] noiseMap) {
-        curText = new Texture2D(terrainWidth, terrainHeight);
+        Texture2D texture = new Texture2D(terrainWidth, terrainHeight);
         Color[] colorMap = new Color[terrainWidth * terrainHeight];
 
         for(int x = 0; x < terrainWidth; x++) {
@@ -160,11 +170,11 @@ public class TerrainGenerator : MonoBehaviour {
             }
         }
 
-        curText.filterMode = FilterMode.Point;
-        curText.SetPixels(colorMap);
-        curText.Apply();
+        texture.filterMode = FilterMode.Point;
+        texture.SetPixels(colorMap);
+        texture.Apply();
 
-        textureRenderer.sharedMaterial.mainTexture = curText;
+        textureRenderer.sharedMaterial.mainTexture = texture;
     }
 
     private void OnDrawGizmos() {
@@ -178,13 +188,22 @@ public class TerrainGenerator : MonoBehaviour {
     }
 
     private void OnValidate() {
-        if(terrainWidth < 1) terrainWidth = 1;
-        if(terrainWidth > 255) terrainWidth = 255;
-        if(terrainHeight < 1) terrainHeight = 1;
-        if(terrainHeight > 255) terrainHeight = 255;
+        if(!useChunks) {
+            if(terrainWidth < 1) terrainWidth = 1;
+            if(terrainWidth > 255) terrainWidth = 255;
+            if(terrainHeight < 1) terrainHeight = 1;
+            if(terrainHeight > 255) terrainHeight = 255;
+        } else {
+            terrainWidth = 241;
+            terrainHeight = 241;
+        }
         if(noiseScale < 0) noiseScale = 0;
         if(octaves < 0) octaves = 0;
         if(lacunarity < 0) lacunarity = 0;
         if(elevation < 0) elevation = 0;
+    }
+
+    private void Update() {
+        if(coloredMesh && textureRenderer.sharedMaterial.mainTexture == null) drawColorMap(noiseMap);
     }
 }
