@@ -33,6 +33,7 @@ public class TerrainGenerator : MonoBehaviour {
     public AnimationCurve elevationCurve;
 
     [Header("Color Settings")]
+    public Material material;
     public Gradient colorGradient;
     public bool coloredMesh = true;
 
@@ -93,9 +94,15 @@ public class TerrainGenerator : MonoBehaviour {
     }
 
     public void CreateMesh() { 
+        GameObject go = new GameObject("Chunk", typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider));
+        go.transform.parent = transform;
+        go.GetComponent<Renderer>().material = material;
+
         mesh = new Mesh();
-        GetComponent<MeshFilter>().mesh = mesh;
-        textureRenderer = GetComponent<MeshRenderer>();
+        go.GetComponent<MeshFilter>().mesh = mesh;
+        go.GetComponent<MeshCollider>().sharedMesh = mesh;
+        textureRenderer = go.GetComponent<MeshRenderer>();
+        textureRenderer.material = material;
 
         int inc = (useChunks && levelOfDetail != 0) ? levelOfDetail * 2 : 1;
         int xVerts = (terrainWidth - 1) / inc + 1;
@@ -140,8 +147,6 @@ public class TerrainGenerator : MonoBehaviour {
         mesh.uv = uvs;
 
         mesh.RecalculateNormals();
-        MeshCollider meshCollider = gameObject.GetComponent<MeshCollider>();
-        meshCollider.sharedMesh = mesh;
     }
 
     public void drawNoiseMap(float[,] noiseMap) {
